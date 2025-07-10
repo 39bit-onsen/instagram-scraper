@@ -106,7 +106,6 @@ python src/run_batch.py
 ---
 
 ## 🧑‍💻 開発者
-- 作成者：あなたの名前（例：Yuichi Matsuyama）
 - 最終更新：2025年7月10日
 
 ````
