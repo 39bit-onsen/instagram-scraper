@@ -258,7 +258,7 @@ class InstagramHashtagScraper:
             return []
     
     def _extract_top_posts(self) -> List[Dict[str, Any]]:
-        """投稿を抽出（新しいInstagram仕様対応）"""
+        """投稿を抽出（リンク直接アクセス方式）"""
         try:
             posts = []
             
@@ -269,61 +269,64 @@ class InstagramHashtagScraper:
             except Exception:
                 pass
             
-            # _aagwクラスのdiv要素を検索
-            post_elements = safe_find_elements(
+            # /p/を含むリンクを検索
+            post_links = safe_find_elements(
                 self.driver,
-                (By.CSS_SELECTOR, "div._aagw"),
+                (By.XPATH, "//a[contains(@href, '/p/')]"),
                 timeout=10
             )
             
-            if not post_elements:
+            if not post_links:
                 # 代替セレクタを試す
-                post_elements = safe_find_elements(
+                post_links = safe_find_elements(
                     self.driver,
-                    (By.XPATH, "//div[@class='_aagw']"),
+                    (By.CSS_SELECTOR, "a[href*='/p/']"),
                     timeout=5
                 )
             
-            self.logger.info(f"投稿要素を {len(post_elements)} 個検出しました")
-            
-            # デバッグ: 最初の要素の情報を出力
-            if post_elements:
-                self.logger.debug(f"最初の要素のクラス: {post_elements[0].get_attribute('class')}")
-                self.logger.debug(f"最初の要素のHTML: {post_elements[0].get_attribute('outerHTML')[:200]}...")
-            
-            # 各投稿をクリックして投稿情報を取得（最大12個）
-            for i, post_element in enumerate(post_elements[:12]):
+            # 重複を除去（同じ投稿への複数のリンクがある場合）
+            unique_urls = []
+            seen_ids = set()
+            for link in post_links:
                 try:
-                    # 要素をクリック可能な状態にスクロール
-                    self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", post_element)
-                    human_sleep(0.5, 1.0)
+                    href = link.get_attribute('href')
+                    if href and '/p/' in href:
+                        post_id = href.split('/p/')[-1].rstrip('/')
+                        if post_id and post_id not in seen_ids:
+                            seen_ids.add(post_id)
+                            unique_urls.append(href)
+                except Exception:
+                    continue
+            
+            self.logger.info(f"投稿リンクを {len(unique_urls)} 個検出しました")
+            
+            # 現在のページURLを保存（後で戻るため）
+            original_url = self.driver.current_url
+            
+            # 各投稿ページを開いて情報を取得（最大12個）
+            for i, post_url in enumerate(unique_urls[:12]):
+                try:
+                    self.logger.info(f"投稿 {i+1}/{min(len(unique_urls), 12)} を取得中: {post_url}")
                     
-                    # div要素をクリック
-                    try:
-                        post_element.click()
-                    except Exception:
-                        # JavaScriptでクリック
-                        self.driver.execute_script("arguments[0].click();", post_element)
+                    # 投稿ページを開く
+                    self.driver.get(post_url)
+                    human_sleep(3.0, 4.0)  # ページ読み込み待機
                     
-                    human_sleep(1.0, 2.0)  # ポップアップ表示待機
-                    
-                    # ポップアップから投稿情報を取得
-                    post_data = self._extract_post_from_popup()
+                    # 投稿情報を取得
+                    post_data = self._extract_post_from_page(post_url)
                     if post_data:
                         posts.append(post_data)
                     
-                    # ポップアップを閉じる
-                    self._close_popup()
-                    human_sleep(0.5, 1.0)
-                    
                 except Exception as e:
                     self.logger.warning(f"投稿 {i+1} の取得に失敗: {e}")
-                    # エラー時もポップアップを閉じる試行
-                    try:
-                        self._close_popup()
-                    except:
-                        pass
                     continue
+            
+            # 元のハッシュタグページに戻る
+            try:
+                self.driver.get(original_url)
+                human_sleep(2.0, 3.0)
+            except Exception:
+                pass
             
             self.logger.info(f"投稿取得完了: {len(posts)}個")
             return posts
@@ -393,6 +396,100 @@ class InstagramHashtagScraper:
             
         except Exception:
             return "image"
+    
+    def _extract_post_from_page(self, post_url: str) -> Optional[Dict[str, Any]]:
+        """投稿ページから情報を取得"""
+        try:
+            post_data = {
+                'url': post_url,
+                'post_id': post_url.split('/p/')[-1].rstrip('/')
+            }
+            
+            # 画像/動画要素を取得
+            try:
+                # 画像を検索
+                img_element = wait_for_element(
+                    self.driver,
+                    (By.CSS_SELECTOR, "img[srcset], article img"),
+                    timeout=5
+                )
+                if img_element:
+                    post_data['image_url'] = img_element.get_attribute('src')
+                    alt_text = img_element.get_attribute('alt')
+                    if alt_text:
+                        post_data['alt_text'] = clean_text(alt_text)[:500]
+                
+                # 動画の場合
+                video_element = self.driver.find_elements(By.TAG_NAME, "video")
+                if video_element:
+                    post_data['type'] = 'video'
+                    if video_element[0].get_attribute('poster'):
+                        post_data['image_url'] = video_element[0].get_attribute('poster')
+                else:
+                    post_data['type'] = 'image'
+            except Exception as e:
+                self.logger.debug(f"メディア要素取得エラー: {e}")
+            
+            # キャプション/説明文を取得
+            try:
+                # 複数のセレクタを試す
+                caption_selectors = [
+                    "h1",  # キャプションがh1に含まれることがある
+                    "span[dir='auto']",  # 説明文
+                    "div._a9zs span",  # 古い構造
+                    "article span"  # 記事内のspan
+                ]
+                
+                caption_text = ""
+                for selector in caption_selectors:
+                    elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                    for element in elements:
+                        text = element.text.strip()
+                        if text and len(text) > 20:  # 意味のあるテキストのみ
+                            caption_text = text
+                            break
+                    if caption_text:
+                        break
+                
+                if caption_text:
+                    post_data['caption'] = clean_text(caption_text)[:500]
+            except Exception as e:
+                self.logger.debug(f"キャプション取得エラー: {e}")
+            
+            # いいね数を取得
+            try:
+                likes_selectors = [
+                    "//a[contains(@href, '/liked_by/')]/span",
+                    "//button[contains(., 'いいね')]/span",
+                    "//section//span[contains(text(), '件')]"
+                ]
+                
+                for selector in likes_selectors:
+                    likes_elements = self.driver.find_elements(By.XPATH, selector)
+                    if likes_elements:
+                        likes_text = likes_elements[0].text
+                        post_data['likes'] = extract_number_from_text(likes_text)
+                        break
+            except Exception:
+                post_data['likes'] = 0
+            
+            # 投稿日時を取得
+            try:
+                time_element = wait_for_element(
+                    self.driver,
+                    (By.TAG_NAME, "time"),
+                    timeout=3
+                )
+                if time_element:
+                    post_data['datetime'] = time_element.get_attribute('datetime')
+            except Exception:
+                pass
+            
+            return post_data if post_data else None
+            
+        except Exception as e:
+            self.logger.warning(f"投稿ページからの情報取得エラー: {e}")
+            return None
     
     def _extract_post_from_popup(self) -> Optional[Dict[str, Any]]:
         """ポップアップから投稿情報を取得"""
