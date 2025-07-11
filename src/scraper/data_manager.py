@@ -155,7 +155,8 @@ class DataManager:
                     'post_url': post.get('url', ''),
                     'post_id': post.get('post_id', ''),
                     'caption': post.get('caption', ''),
-                    'tags': post.get('tags', [])
+                    'tags': post.get('tags', []),
+                    'datetime': post.get('datetime', '')
                 }
                 
                 # タグが存在する投稿のみ追加
@@ -484,13 +485,15 @@ def main():
                 'url': 'https://www.instagram.com/p/test1/', 
                 'type': 'image',
                 'caption': 'テスト投稿です #test #sample #フリーモデル #photography',
-                'tags': ['#test', '#sample', '#フリーモデル', '#photography']
+                'tags': ['#test', '#sample', '#フリーモデル', '#photography'],
+                'datetime': '2025-07-10T10:30:00.000Z'
             },
             {
                 'url': 'https://www.instagram.com/p/test2/', 
                 'type': 'video',
                 'caption': '動画テストです #video #test',
-                'tags': ['#video', '#test']
+                'tags': ['#video', '#test'],
+                'datetime': '2025-07-09T15:45:00.000Z'
             }
         ],
         'scraped_at': time.time(),
