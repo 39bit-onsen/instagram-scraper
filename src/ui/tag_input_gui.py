@@ -14,7 +14,7 @@ from datetime import datetime
 import sys
 
 # バージョン情報
-VERSION = "v2.2.1"
+VERSION = "v2.2.3"
 
 # パッケージのインポートパスを設定
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -234,7 +234,7 @@ class InstagramScraperGUI:
     def create_progress_section(self, parent):
         """進捗表示セクション"""
         progress_frame = ttk.LabelFrame(parent, text="実行状況", padding="10")
-        progress_frame.grid(row=4, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 10))
+        progress_frame.grid(row=5, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 10))
         progress_frame.columnconfigure(0, weight=1)
         
         # 進捗バー
@@ -253,7 +253,7 @@ class InstagramScraperGUI:
     def create_result_section(self, parent):
         """結果表示セクション"""
         result_frame = ttk.LabelFrame(parent, text="実行結果", padding="10")
-        result_frame.grid(row=5, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
+        result_frame.grid(row=6, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
         result_frame.columnconfigure(0, weight=1)
         result_frame.rowconfigure(0, weight=1)
         
@@ -267,7 +267,7 @@ class InstagramScraperGUI:
         self.result_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
         # 親フレームのグリッド重み設定
-        parent.rowconfigure(5, weight=1)
+        parent.rowconfigure(6, weight=1)
         
     def create_status_bar(self, parent):
         """ステータスバー"""
@@ -275,7 +275,7 @@ class InstagramScraperGUI:
         self.status_var.set("準備完了")
         
         status_frame = ttk.Frame(parent)
-        status_frame.grid(row=6, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(10, 0))
+        status_frame.grid(row=7, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(10, 0))
         status_frame.columnconfigure(0, weight=1)
         
         status_label = ttk.Label(status_frame, textvariable=self.status_var, relief=tk.SUNKEN)
