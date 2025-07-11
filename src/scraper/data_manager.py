@@ -32,7 +32,7 @@ class DataManager:
         create_directory_if_not_exists(self.base_dir)
     
     def save_hashtag_data(self, hashtag_data: Dict[str, Any], 
-                         custom_filename: Optional[str] = None) -> tuple[str, str]:
+                         custom_filename: Optional[str] = None) -> tuple[str, str, str]:
         """
         ハッシュタグデータをCSV/JSON形式で保存
         
@@ -41,7 +41,7 @@ class DataManager:
             custom_filename: カスタムファイル名（拡張子なし）
             
         Returns:
-            (CSV filepath, JSON filepath)
+            (CSV filepath, JSON filepath, Tags JSON filepath)
         """
         try:
             # 現在の年月ディレクトリを取得
@@ -57,6 +57,7 @@ class DataManager:
             
             csv_filepath = month_dir / f"{base_filename}.csv"
             json_filepath = month_dir / f"{base_filename}.json"
+            tags_json_filepath = month_dir / f"{base_filename}_tags.json"
             
             # CSV形式で保存
             csv_path = self._save_to_csv(hashtag_data, csv_filepath)
@@ -64,11 +65,15 @@ class DataManager:
             # JSON形式でバックアップ保存
             json_path = self._save_to_json(hashtag_data, json_filepath)
             
+            # タグ抽出JSON形式で保存
+            tags_json_path = self._save_tags_to_json(hashtag_data, tags_json_filepath)
+            
             self.logger.info(f"✅ データ保存完了: {base_filename}")
             self.logger.info(f"   CSV: {csv_path}")
             self.logger.info(f"   JSON: {json_path}")
+            self.logger.info(f"   Tags JSON: {tags_json_path}")
             
-            return str(csv_path), str(json_path)
+            return str(csv_path), str(json_path), str(tags_json_path)
             
         except Exception as e:
             self.logger.error(f"❌ データ保存エラー: {e}")
@@ -129,6 +134,58 @@ class DataManager:
             
         except Exception as e:
             self.logger.error(f"JSON保存エラー: {e}")
+            raise
+    
+    def _save_tags_to_json(self, hashtag_data: Dict[str, Any], filepath: Path) -> str:
+        """タグ抽出データをJSON形式で保存"""
+        try:
+            # タグ抽出用のデータ構造を作成
+            tags_data = {
+                'hashtag': hashtag_data.get('hashtag', ''),
+                'url': hashtag_data.get('url', ''),
+                'scraped_at': datetime.fromtimestamp(
+                    hashtag_data.get('scraped_at', 0)
+                ).strftime('%Y-%m-%d %H:%M:%S') if hashtag_data.get('scraped_at') else '',
+                'posts_with_tags': []
+            }
+            
+            # 各投稿からタグ情報を抽出
+            for post in hashtag_data.get('top_posts', []):
+                post_tags = {
+                    'post_url': post.get('url', ''),
+                    'post_id': post.get('post_id', ''),
+                    'caption': post.get('caption', ''),
+                    'tags': post.get('tags', [])
+                }
+                
+                # タグが存在する投稿のみ追加
+                if post_tags['tags']:
+                    tags_data['posts_with_tags'].append(post_tags)
+            
+            # 統計情報を追加
+            all_tags = []
+            for post in tags_data['posts_with_tags']:
+                all_tags.extend(post['tags'])
+            
+            # タグの出現回数をカウント
+            from collections import Counter
+            tag_counts = Counter(all_tags)
+            
+            tags_data['statistics'] = {
+                'total_posts_with_tags': len(tags_data['posts_with_tags']),
+                'unique_tags_count': len(tag_counts),
+                'most_common_tags': tag_counts.most_common(10),
+                'all_unique_tags': list(tag_counts.keys())
+            }
+            
+            # JSON保存
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(tags_data, f, indent=2, ensure_ascii=False)
+            
+            return str(filepath)
+            
+        except Exception as e:
+            self.logger.error(f"タグJSON保存エラー: {e}")
             raise
     
     def save_batch_results(self, hashtag_results: List[Dict[str, Any]], 
@@ -423,8 +480,18 @@ def main():
         'post_count': 12345,
         'related_tags': ['testdata', 'sample', 'demo'],
         'top_posts': [
-            {'url': 'https://www.instagram.com/p/test1/', 'type': 'image'},
-            {'url': 'https://www.instagram.com/p/test2/', 'type': 'video'}
+            {
+                'url': 'https://www.instagram.com/p/test1/', 
+                'type': 'image',
+                'caption': 'テスト投稿です #test #sample #フリーモデル #photography',
+                'tags': ['#test', '#sample', '#フリーモデル', '#photography']
+            },
+            {
+                'url': 'https://www.instagram.com/p/test2/', 
+                'type': 'video',
+                'caption': '動画テストです #video #test',
+                'tags': ['#video', '#test']
+            }
         ],
         'scraped_at': time.time(),
         'error': None
@@ -432,10 +499,11 @@ def main():
     
     try:
         # データ保存テスト
-        csv_path, json_path = dm.save_hashtag_data(sample_data, "test_data")
+        csv_path, json_path, tags_json_path = dm.save_hashtag_data(sample_data, "test_data")
         print(f"✅ テストデータを保存しました")
         print(f"   CSV: {csv_path}")
         print(f"   JSON: {json_path}")
+        print(f"   Tags JSON: {tags_json_path}")
         
         # データ読み込みテスト
         loaded_df = dm.load_csv_data(csv_path)

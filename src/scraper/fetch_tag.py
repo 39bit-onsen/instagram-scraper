@@ -19,7 +19,8 @@ from .utils import (
     setup_logger, human_sleep, wait_for_element, safe_click,
     get_element_text, get_element_attribute, extract_number_from_text,
     clean_text, retry_on_failure, safe_find_elements,
-    exponential_backoff_sleep, handle_instagram_errors, get_error_recovery_suggestions
+    exponential_backoff_sleep, handle_instagram_errors, get_error_recovery_suggestions,
+    extract_hashtags_from_text
 )
 from .login import InstagramLogin
 
@@ -454,6 +455,8 @@ class InstagramHashtagScraper:
                 
                 if caption_text:
                     post_data['caption'] = clean_text(caption_text)[:500]
+                    # キャプションからハッシュタグを抽出
+                    post_data['tags'] = extract_hashtags_from_text(caption_text)
             except Exception as e:
                 self.logger.debug(f"キャプション取得エラー: {e}")
             

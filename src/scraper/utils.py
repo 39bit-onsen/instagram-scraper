@@ -660,6 +660,43 @@ def wait_for_page_load(driver: webdriver.Chrome, timeout: int = 10) -> bool:
 # ログ設定の初期化
 logger = setup_logger()
 
+def extract_hashtags_from_text(text: str) -> List[str]:
+    """
+    テキストからハッシュタグを抽出
+    
+    Args:
+        text: 対象テキスト
+        
+    Returns:
+        抽出されたハッシュタグのリスト（#を含む）
+    """
+    import re
+    
+    if not text:
+        return []
+    
+    # ハッシュタグのパターン（Unicode文字に対応）
+    hashtag_pattern = r'#[^\s#]+(?:[^\s#]*[^\s#.,!?、。])?'
+    
+    # ハッシュタグを抽出
+    hashtags = re.findall(hashtag_pattern, text)
+    
+    # 重複を除去し、空でないものだけを返す
+    unique_hashtags = []
+    seen = set()
+    
+    for hashtag in hashtags:
+        # 末尾の句読点や記号を除去
+        cleaned_tag = re.sub(r'[.,!?、。]+$', '', hashtag)
+        
+        # 空でなく、重複していない場合のみ追加
+        if cleaned_tag and len(cleaned_tag) > 1 and cleaned_tag not in seen:
+            unique_hashtags.append(cleaned_tag)
+            seen.add(cleaned_tag)
+    
+    return unique_hashtags
+
+
 def get_error_recovery_suggestions(error_type: str) -> dict:
     """
     エラータイプに応じた復旧提案を取得

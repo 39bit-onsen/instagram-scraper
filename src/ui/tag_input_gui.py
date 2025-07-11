@@ -455,7 +455,7 @@ class InstagramScraperGUI:
             
             if len(results) == 1:
                 # 単一結果
-                csv_path, json_path = self.data_manager.save_hashtag_data(
+                csv_path, json_path, tags_json_path = self.data_manager.save_hashtag_data(
                     results[0], 
                     filename if filename else None
                 )
@@ -469,6 +469,8 @@ class InstagramScraperGUI:
             self.append_result(f"\n💾 データを保存しました:")
             self.append_result(f"   CSV: {csv_path}")
             self.append_result(f"   JSON: {json_path}")
+            if len(results) == 1:
+                self.append_result(f"   Tags JSON: {tags_json_path}")
             
         except Exception as e:
             self.append_result(f"❌ データ保存エラー: {str(e)}")
