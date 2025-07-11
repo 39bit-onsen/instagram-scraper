@@ -17,7 +17,8 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from .utils import (
     setup_logger, human_sleep, wait_for_element, safe_click,
     get_element_text, get_element_attribute, extract_number_from_text,
-    clean_text, retry_on_failure, safe_find_elements
+    clean_text, retry_on_failure, safe_find_elements,
+    exponential_backoff_sleep, handle_instagram_errors, get_error_recovery_suggestions
 )
 from .login import InstagramLogin
 

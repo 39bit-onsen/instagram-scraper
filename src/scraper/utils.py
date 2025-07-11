@@ -389,7 +389,10 @@ def check_instagram_login_status(driver: webdriver.Chrome) -> bool:
             return False
             
     except Exception as e:
-        logger.warning(f"ログイン状態チェックエラー: {e}")
+        try:
+            logger.warning(f"ログイン状態チェックエラー: {e}")
+        except NameError:
+            print(f"⚠️ ログイン状態チェックエラー: {e}")
         return False
 
 
@@ -434,7 +437,10 @@ def detect_rate_limiting(driver: webdriver.Chrome) -> bool:
         return False
         
     except Exception as e:
-        logger.warning(f"レート制限検知エラー: {e}")
+        try:
+            logger.warning(f"レート制限検知エラー: {e}")
+        except NameError:
+            print(f"⚠️ レート制限検知エラー: {e}")
         return False
 
 
@@ -481,7 +487,10 @@ def detect_dom_changes(driver: webdriver.Chrome, expected_selectors: list) -> li
                 })
         
     except Exception as e:
-        logger.error(f"DOM変更検知エラー: {e}")
+        try:
+            logger.error(f"DOM変更検知エラー: {e}")
+        except NameError:
+            print(f"❌ DOM変更検知エラー: {e}")
     
     return missing_selectors
 
@@ -565,7 +574,11 @@ def exponential_backoff_sleep(attempt: int, base_delay: float = 1.0, max_delay: 
     jitter = random.uniform(0, delay * 0.1)  # ジッター追加
     final_delay = delay + jitter
     
-    logger.info(f"待機中: {final_delay:.1f}秒")
+    # ログ出力（グローバルloggerが定義されていない場合は print を使用）
+    try:
+        logger.info(f"待機中: {final_delay:.1f}秒")
+    except NameError:
+        print(f"待機中: {final_delay:.1f}秒")
     time.sleep(final_delay)
 
 
