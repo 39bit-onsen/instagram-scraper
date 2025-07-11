@@ -26,18 +26,20 @@ from .login import InstagramLogin
 class InstagramHashtagScraper:
     """Instagram ハッシュタグスクレイパー"""
     
-    def __init__(self, headless: bool = False, cookies_dir: str = "cookies"):
+    def __init__(self, headless: bool = False, cookies_dir: str = "cookies", skip_login_check: bool = True):
         """
         初期化
         
         Args:
             headless: ヘッドレスモード
             cookies_dir: Cookie保存ディレクトリ
+            skip_login_check: ログイン状態チェックをスキップするかどうか
         """
         self.headless = headless
         self.driver: Optional[webdriver.Chrome] = None
         self.login_manager = InstagramLogin(cookies_dir)
         self.logger = setup_logger("hashtag_scraper")
+        self.skip_login_check = skip_login_check
         
     def setup_driver(self) -> webdriver.Chrome:
         """WebDriverをセットアップ"""
@@ -105,7 +107,7 @@ class InstagramHashtagScraper:
                 human_sleep(5.0, 5.0)  # 固定で5秒待機
                 
                 # エラー状態チェック
-                error_type = handle_instagram_errors(self.driver, self.logger)
+                error_type = handle_instagram_errors(self.driver, self.logger, skip_login_check=self.skip_login_check)
                 
                 if error_type == 'login_required':
                     hashtag_data["error"] = "ログインセッションが切れています"

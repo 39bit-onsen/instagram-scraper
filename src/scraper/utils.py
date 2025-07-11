@@ -495,20 +495,21 @@ def detect_dom_changes(driver: webdriver.Chrome, expected_selectors: list) -> li
     return missing_selectors
 
 
-def handle_instagram_errors(driver: webdriver.Chrome, logger_instance) -> str:
+def handle_instagram_errors(driver: webdriver.Chrome, logger_instance, skip_login_check: bool = False) -> str:
     """
     Instagram固有のエラーを検知・処理
     
     Args:
         driver: WebDriverインスタンス
         logger_instance: ロガーインスタンス
+        skip_login_check: ログイン状態チェックをスキップするかどうか
         
     Returns:
         エラータイプ ('login_required', 'rate_limited', 'blocked', 'dom_changed', 'none')
     """
     try:
-        # ログイン状態チェック
-        if not check_instagram_login_status(driver):
+        # ログイン状態チェック（一時的に無効化可能）
+        if not skip_login_check and not check_instagram_login_status(driver):
             logger_instance.warning("⚠️ ログインセッションが切れています")
             return 'login_required'
         
