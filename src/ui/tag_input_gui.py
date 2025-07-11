@@ -14,7 +14,7 @@ from datetime import datetime
 import sys
 
 # バージョン情報
-VERSION = "v2.2.6"
+VERSION = "v3.0.0"
 
 # パッケージのインポートパスを設定
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -74,13 +74,40 @@ class InstagramScraperGUI:
         
     def create_widgets(self):
         """ウィジェットの作成"""
+        # タブノートブック作成
+        self.notebook = ttk.Notebook(self.root)
+        self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # メインタブ
+        self.main_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.main_tab, text="メイン")
+        
+        # 統計タブ
+        self.stats_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.stats_tab, text="統計情報")
+        
+        # 詳細タブ
+        self.details_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.details_tab, text="詳細情報")
+        
+        # メインタブの内容を作成
+        self.create_main_tab_content()
+        
+        # 統計タブの内容を作成
+        self.create_stats_tab_content()
+        
+        # 詳細タブの内容を作成
+        self.create_details_tab_content()
+        
+    def create_main_tab_content(self):
+        """メインタブの内容を作成"""
         # メインフレーム
-        main_frame = ttk.Frame(self.root, padding="10")
+        main_frame = ttk.Frame(self.main_tab, padding="10")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
         # グリッドの重み設定
-        self.root.columnconfigure(0, weight=1)
-        self.root.rowconfigure(0, weight=1)
+        self.main_tab.columnconfigure(0, weight=1)
+        self.main_tab.rowconfigure(0, weight=1)
         main_frame.columnconfigure(1, weight=1)
         
         # タイトル
@@ -108,6 +135,81 @@ class InstagramScraperGUI:
         
         # ステータスバー
         self.create_status_bar(main_frame)
+        
+    def create_stats_tab_content(self):
+        """統計タブの内容を作成"""
+        # 統計フレーム
+        stats_frame = ttk.Frame(self.stats_tab, padding="10")
+        stats_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        # グリッドの重み設定
+        self.stats_tab.columnconfigure(0, weight=1)
+        self.stats_tab.rowconfigure(0, weight=1)
+        stats_frame.columnconfigure(0, weight=1)
+        stats_frame.rowconfigure(1, weight=1)
+        
+        # タイトル
+        stats_title = ttk.Label(
+            stats_frame,
+            text="ハッシュタグ統計情報",
+            font=("Arial", 14, "bold")
+        )
+        stats_title.grid(row=0, column=0, pady=(0, 20))
+        
+        # 統計情報表示エリア
+        self.stats_text = scrolledtext.ScrolledText(
+            stats_frame,
+            height=25,
+            wrap=tk.WORD,
+            state=tk.DISABLED,
+            font=("Consolas", 10)
+        )
+        self.stats_text.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+    def create_details_tab_content(self):
+        """詳細タブの内容を作成"""
+        # 詳細フレーム
+        details_frame = ttk.Frame(self.details_tab, padding="10")
+        details_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        # グリッドの重み設定
+        self.details_tab.columnconfigure(0, weight=1)
+        self.details_tab.rowconfigure(0, weight=1)
+        details_frame.columnconfigure(0, weight=1)
+        details_frame.rowconfigure(1, weight=1)
+        
+        # タイトル
+        details_title = ttk.Label(
+            details_frame,
+            text="投稿詳細情報",
+            font=("Arial", 14, "bold")
+        )
+        details_title.grid(row=0, column=0, pady=(0, 10))
+        
+        # Treeview for 投稿一覧
+        columns = ("hashtag", "post_url", "caption", "tags", "datetime")
+        self.details_tree = ttk.Treeview(details_frame, columns=columns, show="headings", height=20)
+        
+        # カラムヘッダー設定
+        self.details_tree.heading("hashtag", text="ハッシュタグ")
+        self.details_tree.heading("post_url", text="投稿URL")
+        self.details_tree.heading("caption", text="キャプション")
+        self.details_tree.heading("tags", text="抽出タグ")
+        self.details_tree.heading("datetime", text="投稿日時")
+        
+        # カラム幅設定
+        self.details_tree.column("hashtag", width=120)
+        self.details_tree.column("post_url", width=200)
+        self.details_tree.column("caption", width=300)
+        self.details_tree.column("tags", width=250)
+        self.details_tree.column("datetime", width=150)
+        
+        # Treeviewとスクロールバー
+        details_scrollbar = ttk.Scrollbar(details_frame, orient="vertical", command=self.details_tree.yview)
+        self.details_tree.configure(yscrollcommand=details_scrollbar.set)
+        
+        self.details_tree.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        details_scrollbar.grid(row=1, column=1, sticky=(tk.N, tk.S))
         
     def create_input_section(self, parent):
         """ハッシュタグ入力セクション"""
@@ -560,6 +662,9 @@ class InstagramScraperGUI:
             self.append_result(f"   JSON: {json_path}")
             self.append_result(f"   Tags JSON: {tags_json_path}")
             
+            # Tags JSONデータを読み込んで統計・詳細タブを更新
+            self.load_and_display_tags_data(tags_json_path)
+            
         except Exception as e:
             self.append_result(f"❌ データ保存エラー: {str(e)}")
             
@@ -579,6 +684,172 @@ class InstagramScraperGUI:
         # 時間追跡停止
         self.stop_time_tracking()
         
+    def update_stats_display(self, tags_data):
+        """統計タブの表示を更新"""
+        self.stats_text.config(state=tk.NORMAL)
+        self.stats_text.delete("1.0", tk.END)
+        
+        try:
+            if isinstance(tags_data, dict):
+                # 単一ハッシュタグの場合
+                if 'statistics' in tags_data:
+                    self._display_single_hashtag_stats(tags_data)
+                # バッチの場合
+                elif 'batch_statistics' in tags_data:
+                    self._display_batch_stats(tags_data)
+                else:
+                    self.stats_text.insert(tk.END, "統計データが見つかりませんでした。")
+            else:
+                self.stats_text.insert(tk.END, "無効なデータ形式です。")
+                
+        except Exception as e:
+            self.stats_text.insert(tk.END, f"統計表示エラー: {e}")
+        
+        self.stats_text.config(state=tk.DISABLED)
+    
+    def _display_single_hashtag_stats(self, tags_data):
+        """単一ハッシュタグの統計表示"""
+        hashtag = tags_data.get('hashtag', '不明')
+        stats = tags_data.get('statistics', {})
+        
+        self.stats_text.insert(tk.END, f"=== #{hashtag} の統計情報 ===\\n\\n")
+        
+        # 基本統計
+        self.stats_text.insert(tk.END, "【基本統計】\\n")
+        self.stats_text.insert(tk.END, f"タグ付き投稿数: {stats.get('total_posts_with_tags', 0)}件\\n")
+        self.stats_text.insert(tk.END, f"ユニークタグ数: {stats.get('unique_tags_count', 0)}個\\n\\n")
+        
+        # 人気タグランキング
+        most_common = stats.get('most_common_tags', [])
+        if most_common:
+            self.stats_text.insert(tk.END, "【人気タグ TOP10】\\n")
+            for i, (tag, count) in enumerate(most_common[:10], 1):
+                self.stats_text.insert(tk.END, f"{i:2d}. {tag:<25} ({count}回)\\n")
+            self.stats_text.insert(tk.END, "\\n")
+        
+        # 全ユニークタグ
+        all_tags = stats.get('all_unique_tags', [])
+        if all_tags:
+            self.stats_text.insert(tk.END, f"【全ユニークタグ ({len(all_tags)}個)】\\n")
+            # 5個ずつ改行して表示
+            for i in range(0, len(all_tags), 5):
+                line_tags = all_tags[i:i+5]
+                self.stats_text.insert(tk.END, ", ".join(line_tags) + "\\n")
+    
+    def _display_batch_stats(self, batch_data):
+        """バッチ統計の表示"""
+        batch_info = batch_data.get('batch_info', {})
+        batch_stats = batch_data.get('batch_statistics', {})
+        hashtags = batch_data.get('hashtags', [])
+        
+        self.stats_text.insert(tk.END, "=== バッチ処理統計情報 ===\\n\\n")
+        
+        # バッチ基本情報
+        self.stats_text.insert(tk.END, "【バッチ情報】\\n")
+        self.stats_text.insert(tk.END, f"処理ハッシュタグ数: {batch_info.get('total_hashtags', 0)}個\\n")
+        self.stats_text.insert(tk.END, f"タグ有り投稿数: {batch_stats.get('total_posts_with_tags', 0)}件\\n")
+        self.stats_text.insert(tk.END, f"全体ユニークタグ数: {batch_stats.get('total_unique_tags', 0)}個\\n\\n")
+        
+        # 全体人気タグランキング
+        overall_common = batch_stats.get('most_common_tags_overall', [])
+        if overall_common:
+            self.stats_text.insert(tk.END, "【全体人気タグ TOP20】\\n")
+            for i, (tag, count) in enumerate(overall_common[:20], 1):
+                self.stats_text.insert(tk.END, f"{i:2d}. {tag:<25} ({count}回)\\n")
+            self.stats_text.insert(tk.END, "\\n")
+        
+        # ハッシュタグ別統計
+        self.stats_text.insert(tk.END, "【ハッシュタグ別統計】\\n")
+        for hashtag_data in hashtags:
+            hashtag = hashtag_data.get('hashtag', '不明')
+            h_stats = hashtag_data.get('statistics', {})
+            posts_count = h_stats.get('total_posts_with_tags', 0)
+            unique_count = h_stats.get('unique_tags_count', 0)
+            
+            self.stats_text.insert(tk.END, f"#{hashtag:<20} | 投稿:{posts_count:3d}件 | タグ:{unique_count:3d}個\\n")
+            
+            # トップ3タグを表示
+            top_tags = h_stats.get('most_common_tags', [])[:3]
+            if top_tags:
+                tag_list = [f"{tag}({count})" for tag, count in top_tags]
+                self.stats_text.insert(tk.END, f"{'':23} | トップ3: {', '.join(tag_list)}\\n")
+            self.stats_text.insert(tk.END, "\\n")
+    
+    def update_details_display(self, tags_data):
+        """詳細タブの表示を更新"""
+        # 既存のデータをクリア
+        for item in self.details_tree.get_children():
+            self.details_tree.delete(item)
+        
+        try:
+            if isinstance(tags_data, dict):
+                if 'posts_with_tags' in tags_data:
+                    # 単一ハッシュタグの場合
+                    hashtag = tags_data.get('hashtag', '不明')
+                    self._add_posts_to_tree(hashtag, tags_data.get('posts_with_tags', []))
+                elif 'hashtags' in tags_data:
+                    # バッチの場合
+                    for hashtag_data in tags_data.get('hashtags', []):
+                        hashtag = hashtag_data.get('hashtag', '不明')
+                        posts = hashtag_data.get('posts_with_tags', [])
+                        self._add_posts_to_tree(hashtag, posts)
+        except Exception as e:
+            # エラー行を追加
+            self.details_tree.insert("", "end", values=(f"エラー: {e}", "", "", "", ""))
+    
+    def _add_posts_to_tree(self, hashtag, posts):
+        """投稿データをTreeviewに追加"""
+        for post in posts:
+            # データの準備
+            post_url = post.get('post_url', '')
+            caption = (post.get('caption', '')[:50] + '...') if len(post.get('caption', '')) > 50 else post.get('caption', '')
+            tags = ', '.join(post.get('tags', []))
+            if len(tags) > 40:
+                tags = tags[:40] + '...'
+            datetime_str = post.get('datetime', '')
+            
+            # Treeviewに行を追加
+            self.details_tree.insert("", "end", values=(
+                hashtag,
+                post_url,
+                caption,
+                tags,
+                datetime_str
+            ))
+    
+    def clear_stats_and_details(self):
+        """統計・詳細タブをクリア"""
+        # 統計タブクリア
+        self.stats_text.config(state=tk.NORMAL)
+        self.stats_text.delete("1.0", tk.END)
+        self.stats_text.insert(tk.END, "スクレイピング実行後に統計情報が表示されます。")
+        self.stats_text.config(state=tk.DISABLED)
+        
+        # 詳細タブクリア
+        for item in self.details_tree.get_children():
+            self.details_tree.delete(item)
+    
+    def load_and_display_tags_data(self, tags_json_path):
+        """Tags JSONデータを読み込んで統計・詳細タブを更新"""
+        try:
+            import json
+            with open(tags_json_path, 'r', encoding='utf-8') as f:
+                tags_data = json.load(f)
+            
+            # 統計タブを更新
+            self.update_stats_display(tags_data)
+            
+            # 詳細タブを更新
+            self.update_details_display(tags_data)
+            
+            # 統計タブに自動切り替え
+            self.notebook.select(1)  # 統計タブのインデックス
+            
+            self.append_result(f"\n📊 統計・詳細情報を表示しました。「統計情報」タブをご確認ください。")
+            
+        except Exception as e:
+            self.append_result(f"❌ 統計データ読み込みエラー: {str(e)}")
+    
     def clear_all(self):
         """全クリア"""
         if self.is_running:
@@ -598,6 +869,9 @@ class InstagramScraperGUI:
         # 時間追跡停止
         self.stop_time_tracking()
         
+        # 統計・詳細タブをクリア
+        self.clear_stats_and_details()
+        
     def show_help(self):
         """ヘルプダイアログ"""
         help_text = """Instagram ハッシュタグスクレイパー ヘルプ
@@ -614,8 +888,14 @@ class InstagramScraperGUI:
 【取得される情報】
 • 投稿数
 • 関連タグ（最大10個）
-• トップ投稿（最大12個）
+• トップ投稿（設定可能、デフォルト20個）
 • 投稿のURL、画像URL、投稿タイプ
+• キャプションから抽出されたハッシュタグ
+
+【タブ機能】
+• メインタブ: 実行・設定・結果表示
+• 統計情報タブ: 人気タグランキング、ユニークタグ一覧
+• 詳細情報タブ: 投稿一覧とタグ詳細
 
 【注意事項】
 • 初回利用時は事前にログインが必要です
@@ -702,7 +982,8 @@ def main():
         app = InstagramScraperGUI(root)
         
         # 初期メッセージ
-        app.append_result("Instagram ハッシュタグスクレイパー v1.0 へようこそ！")
+        app.append_result("Instagram ハッシュタグスクレイパー v3.0.0 へようこそ！")
+        app.append_result("新機能: タブ表示、統計情報、詳細分析が追加されました。")
         app.append_result("使用方法については「ヘルプ」ボタンをクリックしてください。")
         app.append_result("\n初回利用時は以下のコマンドでログインしてください:")
         app.append_result("python src/scraper/login.py")
