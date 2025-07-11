@@ -108,7 +108,7 @@ class InstagramHashtagScraper:
                 
                 # ハッシュタグページにアクセス
                 self.driver.get(hashtag_data["url"])
-                human_sleep(5.0, 5.0)  # 固定で5秒待機
+                human_sleep(8.0, 10.0)  # 8-10秒待機
                 
                 # エラー状態チェック
                 error_type = handle_instagram_errors(
@@ -266,7 +266,7 @@ class InstagramHashtagScraper:
             # ページを少しスクロールして投稿を表示
             try:
                 self.driver.execute_script("window.scrollTo(0, 500);")
-                human_sleep(2.0, 3.0)
+                human_sleep(4.0, 5.0)
             except Exception:
                 pass
             
@@ -311,7 +311,7 @@ class InstagramHashtagScraper:
                     
                     # 投稿ページを開く
                     self.driver.get(post_url)
-                    human_sleep(3.0, 4.0)  # ページ読み込み待機
+                    human_sleep(5.0, 8.0)  # ページ読み込み待機
                     
                     # 投稿情報を取得
                     post_data = self._extract_post_from_page(post_url)
