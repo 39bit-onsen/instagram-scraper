@@ -347,6 +347,228 @@ def retry_on_failure(max_retries: int = 3, delay: float = 1.0):
     return decorator
 
 
+def check_instagram_login_status(driver: webdriver.Chrome) -> bool:
+    """
+    Instagramのログイン状態をチェック
+    
+    Args:
+        driver: WebDriverインスタンス
+        
+    Returns:
+        ログイン状態かどうか
+    """
+    try:
+        current_url = driver.current_url
+        
+        # ログインページにリダイレクトされた場合
+        if 'accounts/login' in current_url:
+            return False
+        
+        # チャレンジページの場合
+        if 'challenge' in current_url:
+            return False
+        
+        # セッション切れのチェック
+        try:
+            # プロフィールメニューの存在確認
+            profile_elements = driver.find_elements(
+                By.XPATH, 
+                "//a[@aria-label='プロフィール'] | //a[contains(@href, '/accounts/edit/')]"
+            )
+            if profile_elements:
+                return True
+                
+            # ナビゲーションバーの存在確認
+            nav_elements = driver.find_elements(
+                By.XPATH,
+                "//nav | //div[contains(@role, 'navigation')]"
+            )
+            return len(nav_elements) > 0
+            
+        except Exception:
+            return False
+            
+    except Exception as e:
+        logger.warning(f"ログイン状態チェックエラー: {e}")
+        return False
+
+
+def detect_rate_limiting(driver: webdriver.Chrome) -> bool:
+    """
+    レート制限の検知
+    
+    Args:
+        driver: WebDriverインスタンス
+        
+    Returns:
+        レート制限されているかどうか
+    """
+    try:
+        # 一般的なレート制限メッセージをチェック
+        rate_limit_indicators = [
+            "しばらく時間をおいてからもう一度実行してください",
+            "Please wait a few minutes",
+            "Try again later",
+            "Rate limit exceeded",
+            "Too many requests",
+            "アクションがブロックされました"
+        ]
+        
+        page_text = driver.page_source.lower()
+        
+        for indicator in rate_limit_indicators:
+            if indicator.lower() in page_text:
+                return True
+        
+        # HTTPステータスコードのチェック
+        try:
+            status_element = driver.find_element(
+                By.XPATH, 
+                "//*[contains(text(), '429') or contains(text(), '503')]"
+            )
+            if status_element:
+                return True
+        except:
+            pass
+        
+        return False
+        
+    except Exception as e:
+        logger.warning(f"レート制限検知エラー: {e}")
+        return False
+
+
+def detect_dom_changes(driver: webdriver.Chrome, expected_selectors: list) -> list:
+    """
+    DOM構造の変更を検知
+    
+    Args:
+        driver: WebDriverインスタンス
+        expected_selectors: 期待されるセレクタのリスト
+        
+    Returns:
+        見つからないセレクタのリスト
+    """
+    missing_selectors = []
+    
+    try:
+        for selector_info in expected_selectors:
+            selector_type = selector_info.get('type', 'xpath')
+            selector = selector_info.get('selector', '')
+            name = selector_info.get('name', 'unknown')
+            
+            try:
+                if selector_type.lower() == 'xpath':
+                    elements = driver.find_elements(By.XPATH, selector)
+                elif selector_type.lower() == 'css':
+                    elements = driver.find_elements(By.CSS_SELECTOR, selector)
+                else:
+                    continue
+                
+                if not elements:
+                    missing_selectors.append({
+                        'name': name,
+                        'selector': selector,
+                        'type': selector_type
+                    })
+                    
+            except Exception as e:
+                missing_selectors.append({
+                    'name': name,
+                    'selector': selector,
+                    'type': selector_type,
+                    'error': str(e)
+                })
+        
+    except Exception as e:
+        logger.error(f"DOM変更検知エラー: {e}")
+    
+    return missing_selectors
+
+
+def handle_instagram_errors(driver: webdriver.Chrome, logger_instance) -> str:
+    """
+    Instagram固有のエラーを検知・処理
+    
+    Args:
+        driver: WebDriverインスタンス
+        logger_instance: ロガーインスタンス
+        
+    Returns:
+        エラータイプ ('login_required', 'rate_limited', 'blocked', 'dom_changed', 'none')
+    """
+    try:
+        # ログイン状態チェック
+        if not check_instagram_login_status(driver):
+            logger_instance.warning("⚠️ ログインセッションが切れています")
+            return 'login_required'
+        
+        # レート制限チェック
+        if detect_rate_limiting(driver):
+            logger_instance.warning("⚠️ レート制限が検知されました")
+            return 'rate_limited'
+        
+        # ブロック状態チェック
+        if check_account_blocked(driver):
+            logger_instance.warning("⚠️ アカウントがブロックされています")
+            return 'blocked'
+        
+        return 'none'
+        
+    except Exception as e:
+        logger_instance.error(f"エラーハンドリング処理でエラー: {e}")
+        return 'unknown'
+
+
+def check_account_blocked(driver: webdriver.Chrome) -> bool:
+    """
+    アカウントブロック状態をチェック
+    
+    Args:
+        driver: WebDriverインスタンス
+        
+    Returns:
+        ブロックされているかどうか
+    """
+    try:
+        block_indicators = [
+            "アカウントがブロックされました",
+            "Account blocked",
+            "この機能は一時的に制限されています",
+            "Feature temporarily blocked",
+            "チャレンジが必要です",
+            "Challenge required"
+        ]
+        
+        page_text = driver.page_source.lower()
+        
+        for indicator in block_indicators:
+            if indicator.lower() in page_text:
+                return True
+        
+        return False
+        
+    except Exception:
+        return False
+
+
+def exponential_backoff_sleep(attempt: int, base_delay: float = 1.0, max_delay: float = 30.0) -> None:
+    """
+    指数的バックオフによる待機
+    
+    Args:
+        attempt: 試行回数（0から開始）
+        base_delay: 基本待機時間
+        max_delay: 最大待機時間
+    """
+    delay = min(base_delay * (2 ** attempt), max_delay)
+    jitter = random.uniform(0, delay * 0.1)  # ジッター追加
+    final_delay = delay + jitter
+    
+    logger.info(f"待機中: {final_delay:.1f}秒")
+    time.sleep(final_delay)
+
+
 def safe_find_elements(driver: webdriver.Chrome, locator: tuple, 
                       timeout: int = 5) -> List[any]:
     """
@@ -422,6 +644,52 @@ def wait_for_page_load(driver: webdriver.Chrome, timeout: int = 10) -> bool:
 
 # ログ設定の初期化
 logger = setup_logger()
+
+def get_error_recovery_suggestions(error_type: str) -> dict:
+    """
+    エラータイプに応じた復旧提案を取得
+    
+    Args:
+        error_type: エラータイプ
+        
+    Returns:
+        復旧提案の辞書
+    """
+    suggestions = {
+        'login_required': {
+            'message': 'ログインが必要です',
+            'action': 'python src/scraper/login.py を実行してください',
+            'wait_time': 0,
+            'retry_recommended': False
+        },
+        'rate_limited': {
+            'message': 'レート制限に達しました',
+            'action': '待機時間を増やして再試行してください',
+            'wait_time': 300,  # 5分
+            'retry_recommended': True
+        },
+        'blocked': {
+            'message': 'アカウントがブロックされています',
+            'action': '24時間待機後に手動ログインしてください',
+            'wait_time': 86400,  # 24時間
+            'retry_recommended': False
+        },
+        'dom_changed': {
+            'message': 'ページ構造が変更されました',
+            'action': 'セレクタの更新が必要です',
+            'wait_time': 0,
+            'retry_recommended': False
+        },
+        'unknown': {
+            'message': '不明なエラーが発生しました',
+            'action': '手動でページを確認してください',
+            'wait_time': 60,
+            'retry_recommended': True
+        }
+    }
+    
+    return suggestions.get(error_type, suggestions['unknown'])
+
 
 # 使用例のためのサンプル関数
 def demo_usage():

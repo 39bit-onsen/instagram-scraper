@@ -68,8 +68,7 @@ class InstagramHashtagScraper:
             self.logger.error(f"❌ セッション初期化エラー: {e}")
             return False
     
-    @retry_on_failure(max_retries=3, delay=2.0)
-    def fetch_hashtag_info(self, hashtag: str) -> Dict[str, Any]:
+    def fetch_hashtag_info(self, hashtag: str, max_retries: int = 3) -> Dict[str, Any]:
         """
         ハッシュタグ情報を取得
         
@@ -85,18 +84,10 @@ class InstagramHashtagScraper:
         # ハッシュタグ名のクリーニング
         clean_hashtag = hashtag.lstrip('#').strip()
         
-        self.logger.info(f"ハッシュタグ情報を取得します: #{clean_hashtag}")
-        
-        # ハッシュタグページにアクセス
-        hashtag_url = f"https://www.instagram.com/explore/tags/{clean_hashtag}/"\n        self.driver.get(hashtag_url)
-        
-        # ページ読み込み待機
-        human_sleep(3.0, 5.0)
-        
         # データ構造の初期化
         hashtag_data = {
             "hashtag": clean_hashtag,
-            "url": hashtag_url,
+            "url": f"https://www.instagram.com/explore/tags/{clean_hashtag}/",
             "post_count": 0,
             "related_tags": [],
             "top_posts": [],
@@ -104,22 +95,51 @@ class InstagramHashtagScraper:
             "scraped_at": time.time()
         }
         
-        try:
-            # 投稿数を取得
-            hashtag_data["post_count"] = self._extract_post_count()
-            
-            # 関連タグを取得
-            hashtag_data["related_tags"] = self._extract_related_tags()
-            
-            # トップ投稿を取得
-            hashtag_data["top_posts"] = self._extract_top_posts()
-            
-            self.logger.info(f"✅ データ取得完了: #{clean_hashtag} ({hashtag_data['post_count']:,} 投稿)")
-            
-        except Exception as e:
-            error_msg = f"データ取得エラー: {e}"
-            self.logger.error(f"❌ {error_msg}")
-            hashtag_data["error"] = error_msg
+        for attempt in range(max_retries):
+            try:
+                self.logger.info(f"ハッシュタグ情報を取得します: #{clean_hashtag} (試行 {attempt + 1}/{max_retries})")
+                
+                # ハッシュタグページにアクセス
+                self.driver.get(hashtag_data["url"])
+                human_sleep(3.0, 5.0)
+                
+                # エラー状態チェック
+                error_type = handle_instagram_errors(self.driver, self.logger)
+                
+                if error_type == 'login_required':
+                    hashtag_data["error"] = "ログインセッションが切れています"
+                    return hashtag_data
+                    
+                elif error_type == 'rate_limited':
+                    if attempt < max_retries - 1:
+                        suggestion = get_error_recovery_suggestions(error_type)
+                        self.logger.warning(f"レート制限検知。{suggestion['wait_time']}秒待機します")
+                        exponential_backoff_sleep(attempt, base_delay=suggestion['wait_time'])
+                        continue
+                    else:
+                        hashtag_data["error"] = "レート制限により取得できませんでした"
+                        return hashtag_data
+                        
+                elif error_type == 'blocked':
+                    hashtag_data["error"] = "アカウントがブロックされています"
+                    return hashtag_data
+                
+                # データ取得実行
+                hashtag_data["post_count"] = self._extract_post_count()
+                hashtag_data["related_tags"] = self._extract_related_tags()
+                hashtag_data["top_posts"] = self._extract_top_posts()
+                
+                self.logger.info(f"✅ データ取得完了: #{clean_hashtag} ({hashtag_data['post_count']:,} 投稿)")
+                return hashtag_data
+                
+            except Exception as e:
+                error_msg = f"データ取得エラー (試行 {attempt + 1}): {e}"
+                self.logger.error(f"❌ {error_msg}")
+                
+                if attempt < max_retries - 1:
+                    exponential_backoff_sleep(attempt)
+                else:
+                    hashtag_data["error"] = f"最大リトライ回数に達しました: {e}"
         
         return hashtag_data
     
