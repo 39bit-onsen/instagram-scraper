@@ -102,7 +102,7 @@ class InstagramHashtagScraper:
                 
                 # ハッシュタグページにアクセス
                 self.driver.get(hashtag_data["url"])
-                human_sleep(3.0, 5.0)
+                human_sleep(5.0, 5.0)  # 固定で5秒待機
                 
                 # エラー状態チェック
                 error_type = handle_instagram_errors(self.driver, self.logger)
