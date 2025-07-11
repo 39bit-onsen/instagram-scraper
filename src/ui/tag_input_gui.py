@@ -13,6 +13,9 @@ from pathlib import Path
 from datetime import datetime
 import sys
 
+# バージョン情報
+VERSION = "v2.1.1"
+
 # パッケージのインポートパスを設定
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
@@ -281,6 +284,10 @@ class InstagramScraperGUI:
         # 時刻表示
         self.time_label = ttk.Label(status_frame, text="")
         self.time_label.grid(row=0, column=1, padx=(10, 0))
+        
+        # バージョン表示
+        self.version_label = ttk.Label(status_frame, text=VERSION, foreground="gray")
+        self.version_label.grid(row=0, column=2, padx=(10, 0))
         
         # 時刻更新
         self.update_time()
