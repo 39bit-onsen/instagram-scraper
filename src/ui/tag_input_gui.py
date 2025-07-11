@@ -14,7 +14,7 @@ from datetime import datetime
 import sys
 
 # バージョン情報
-VERSION = "v2.2.4"
+VERSION = "v2.2.5"
 
 # パッケージのインポートパスを設定
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -461,7 +461,7 @@ class InstagramScraperGUI:
                 )
             else:
                 # 複数結果
-                csv_path, json_path = self.data_manager.save_batch_results(
+                csv_path, json_path, tags_json_path = self.data_manager.save_batch_results(
                     results, 
                     filename if filename else None
                 )
@@ -469,8 +469,7 @@ class InstagramScraperGUI:
             self.append_result(f"\n💾 データを保存しました:")
             self.append_result(f"   CSV: {csv_path}")
             self.append_result(f"   JSON: {json_path}")
-            if len(results) == 1:
-                self.append_result(f"   Tags JSON: {tags_json_path}")
+            self.append_result(f"   Tags JSON: {tags_json_path}")
             
         except Exception as e:
             self.append_result(f"❌ データ保存エラー: {str(e)}")

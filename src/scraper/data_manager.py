@@ -190,7 +190,7 @@ class DataManager:
             raise
     
     def save_batch_results(self, hashtag_results: List[Dict[str, Any]], 
-                          batch_name: Optional[str] = None) -> tuple[str, str]:
+                          batch_name: Optional[str] = None) -> tuple[str, str, str]:
         """
         複数ハッシュタグの結果を一括保存
         
@@ -199,7 +199,7 @@ class DataManager:
             batch_name: バッチ名
             
         Returns:
-            (CSV filepath, JSON filepath)
+            (CSV filepath, JSON filepath, Tags JSON filepath)
         """
         try:
             # 現在の年月ディレクトリを取得
@@ -214,6 +214,7 @@ class DataManager:
             
             csv_filepath = month_dir / f"{base_filename}.csv"
             json_filepath = month_dir / f"{base_filename}.json"
+            tags_json_filepath = month_dir / f"{base_filename}_tags.json"
             
             # CSV形式で保存
             csv_path = self._save_batch_to_csv(hashtag_results, csv_filepath)
@@ -221,11 +222,15 @@ class DataManager:
             # JSON形式でバックアップ保存
             json_path = self._save_batch_to_json(hashtag_results, json_filepath)
             
+            # バッチタグ抽出JSON形式で保存
+            tags_json_path = self._save_batch_tags_to_json(hashtag_results, tags_json_filepath)
+            
             self.logger.info(f"✅ バッチデータ保存完了: {len(hashtag_results)}件")
             self.logger.info(f"   CSV: {csv_path}")
             self.logger.info(f"   JSON: {json_path}")
+            self.logger.info(f"   Tags JSON: {tags_json_path}")
             
-            return str(csv_path), str(json_path)
+            return str(csv_path), str(json_path), str(tags_json_path)
             
         except Exception as e:
             self.logger.error(f"❌ バッチデータ保存エラー: {e}")
@@ -293,6 +298,93 @@ class DataManager:
             
         except Exception as e:
             self.logger.error(f"バッチJSON保存エラー: {e}")
+            raise
+    
+    def _save_batch_tags_to_json(self, hashtag_results: List[Dict[str, Any]], 
+                                filepath: Path) -> str:
+        """バッチ結果のタグ抽出データをJSON形式で保存"""
+        try:
+            # バッチタグ抽出用のデータ構造を作成
+            batch_tags_data = {
+                'batch_info': {
+                    'total_hashtags': len(hashtag_results),
+                    'saved_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                },
+                'hashtags': []
+            }
+            
+            # 各ハッシュタグのタグ情報を処理
+            for hashtag_data in hashtag_results:
+                hashtag_tags = {
+                    'hashtag': hashtag_data.get('hashtag', ''),
+                    'url': hashtag_data.get('url', ''),
+                    'scraped_at': datetime.fromtimestamp(
+                        hashtag_data.get('scraped_at', 0)
+                    ).strftime('%Y-%m-%d %H:%M:%S') if hashtag_data.get('scraped_at') else '',
+                    'posts_with_tags': []
+                }
+                
+                # 各投稿からタグ情報を抽出
+                for post in hashtag_data.get('top_posts', []):
+                    post_tags = {
+                        'post_url': post.get('url', ''),
+                        'post_id': post.get('post_id', ''),
+                        'caption': post.get('caption', ''),
+                        'tags': post.get('tags', []),
+                        'datetime': post.get('datetime', '')
+                    }
+                    
+                    # タグが存在する投稿のみ追加
+                    if post_tags['tags']:
+                        hashtag_tags['posts_with_tags'].append(post_tags)
+                
+                # タグ統計情報を追加
+                all_tags = []
+                for post in hashtag_tags['posts_with_tags']:
+                    all_tags.extend(post['tags'])
+                
+                # タグの出現回数をカウント
+                from collections import Counter
+                tag_counts = Counter(all_tags)
+                
+                hashtag_tags['statistics'] = {
+                    'total_posts_with_tags': len(hashtag_tags['posts_with_tags']),
+                    'unique_tags_count': len(tag_counts),
+                    'most_common_tags': tag_counts.most_common(10),
+                    'all_unique_tags': list(tag_counts.keys())
+                }
+                
+                # タグ情報があるハッシュタグのみ追加
+                if hashtag_tags['posts_with_tags']:
+                    batch_tags_data['hashtags'].append(hashtag_tags)
+            
+            # 全体統計情報を追加
+            all_batch_tags = []
+            total_posts_with_tags = 0
+            for hashtag in batch_tags_data['hashtags']:
+                for post in hashtag['posts_with_tags']:
+                    all_batch_tags.extend(post['tags'])
+                total_posts_with_tags += hashtag['statistics']['total_posts_with_tags']
+            
+            from collections import Counter
+            batch_tag_counts = Counter(all_batch_tags)
+            
+            batch_tags_data['batch_statistics'] = {
+                'total_hashtags_with_tags': len(batch_tags_data['hashtags']),
+                'total_posts_with_tags': total_posts_with_tags,
+                'total_unique_tags': len(batch_tag_counts),
+                'most_common_tags_overall': batch_tag_counts.most_common(20),
+                'all_unique_tags_overall': list(batch_tag_counts.keys())
+            }
+            
+            # JSON保存
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(batch_tags_data, f, indent=2, ensure_ascii=False)
+            
+            return str(filepath)
+            
+        except Exception as e:
+            self.logger.error(f"バッチタグJSON保存エラー: {e}")
             raise
     
     def load_csv_data(self, filepath: Union[str, Path]) -> pd.DataFrame:
