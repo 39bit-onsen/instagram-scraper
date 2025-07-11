@@ -14,7 +14,7 @@ from datetime import datetime
 import sys
 
 # バージョン情報
-VERSION = "v2.2.5"
+VERSION = "v2.2.6"
 
 # パッケージのインポートパスを設定
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -49,6 +49,11 @@ class InstagramScraperGUI:
         # 実行状態管理
         self.is_running = False
         self.current_thread = None
+        
+        # 時間管理
+        self.start_time = None
+        self.last_update_time = None
+        self.time_update_job = None
         
     def setup_window(self):
         """ウィンドウの基本設定"""
@@ -250,6 +255,19 @@ class InstagramScraperGUI:
         self.progress_label = ttk.Label(progress_frame, text="待機中...")
         self.progress_label.grid(row=1, column=0, sticky=tk.W)
         
+        # 時間情報フレーム
+        time_info_frame = ttk.Frame(progress_frame)
+        time_info_frame.grid(row=2, column=0, sticky=(tk.W, tk.E), pady=(5, 0))
+        time_info_frame.columnconfigure(1, weight=1)
+        
+        # 経過時間ラベル
+        self.elapsed_time_label = ttk.Label(time_info_frame, text="経過時間: --:--:--")
+        self.elapsed_time_label.grid(row=0, column=0, sticky=tk.W)
+        
+        # 推定残り時間ラベル
+        self.remaining_time_label = ttk.Label(time_info_frame, text="推定残り時間: --:--:--")
+        self.remaining_time_label.grid(row=0, column=1, sticky=tk.E)
+        
     def create_result_section(self, parent):
         """結果表示セクション"""
         result_frame = ttk.LabelFrame(parent, text="実行結果", padding="10")
@@ -298,6 +316,71 @@ class InstagramScraperGUI:
         self.time_label.config(text=current_time)
         self.root.after(1000, self.update_time)  # 1秒後に再実行
         
+    def update_progress_time(self, current_index: int, total_count: int):
+        """進捗時間情報の更新"""
+        if not self.is_running or not self.start_time:
+            return
+            
+        import time
+        current_time = time.time()
+        elapsed_seconds = current_time - self.start_time
+        
+        # 経過時間を表示
+        elapsed_str = self._format_time(elapsed_seconds)
+        self.elapsed_time_label.config(text=f"経過時間: {elapsed_str}")
+        
+        # 推定残り時間を計算
+        if current_index > 0:
+            # 1つあたりの平均処理時間を計算
+            avg_time_per_item = elapsed_seconds / current_index
+            remaining_items = total_count - current_index
+            estimated_remaining = avg_time_per_item * remaining_items
+            
+            remaining_str = self._format_time(estimated_remaining)
+            self.remaining_time_label.config(text=f"推定残り時間: {remaining_str}")
+        else:
+            self.remaining_time_label.config(text="推定残り時間: 計算中...")
+    
+    def _format_time(self, seconds: float) -> str:
+        """秒数を時:分:秒形式に変換"""
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        
+        if hours > 0:
+            return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+        else:
+            return f"{minutes:02d}:{secs:02d}"
+    
+    def start_time_tracking(self):
+        """時間追跡を開始"""
+        import time
+        self.start_time = time.time()
+        self._update_time_display()
+    
+    def _update_time_display(self):
+        """時間表示の定期更新"""
+        if self.is_running:
+            import time
+            current_time = time.time()
+            elapsed_seconds = current_time - self.start_time if self.start_time else 0
+            
+            elapsed_str = self._format_time(elapsed_seconds)
+            self.elapsed_time_label.config(text=f"経過時間: {elapsed_str}")
+            
+            # 1秒後に再実行
+            self.time_update_job = self.root.after(1000, self._update_time_display)
+    
+    def stop_time_tracking(self):
+        """時間追跡を停止"""
+        if self.time_update_job:
+            self.root.after_cancel(self.time_update_job)
+            self.time_update_job = None
+        
+        # 表示をリセット
+        self.elapsed_time_label.config(text="経過時間: --:--:--")
+        self.remaining_time_label.config(text="推定残り時間: --:--:--")
+        
     def execute_scraping(self):
         """スクレイピング実行"""
         if self.is_running:
@@ -315,6 +398,9 @@ class InstagramScraperGUI:
         self.stop_button.config(state="normal")
         self.progress_var.set(0)
         self.update_status("実行中...")
+        
+        # 時間追跡開始
+        self.start_time_tracking()
         
         # バックグラウンドで実行
         self.current_thread = threading.Thread(
@@ -354,6 +440,9 @@ class InstagramScraperGUI:
                 progress = (i / total_tags) * 100
                 self.root.after(0, lambda: self.progress_var.set(progress))
                 self.root.after(0, lambda tag=hashtag: self.update_status(f"処理中: #{tag}"))
+                
+                # 時間情報更新
+                self.root.after(0, lambda idx=i, total=total_tags: self.update_progress_time(idx, total))
                 
                 # ログ出力
                 self.root.after(0, lambda tag=hashtag: self.append_result(f"\n=== #{tag} の処理を開始 ==="))
@@ -487,6 +576,9 @@ class InstagramScraperGUI:
         self.stop_button.config(state="disabled")
         self.update_status("準備完了")
         
+        # 時間追跡停止
+        self.stop_time_tracking()
+        
     def clear_all(self):
         """全クリア"""
         if self.is_running:
@@ -502,6 +594,9 @@ class InstagramScraperGUI:
         self.result_text.config(state=tk.DISABLED)
         self.progress_var.set(0)
         self.update_status("準備完了")
+        
+        # 時間追跡停止
+        self.stop_time_tracking()
         
     def show_help(self):
         """ヘルプダイアログ"""
