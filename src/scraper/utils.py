@@ -495,7 +495,7 @@ def detect_dom_changes(driver: webdriver.Chrome, expected_selectors: list) -> li
     return missing_selectors
 
 
-def handle_instagram_errors(driver: webdriver.Chrome, logger_instance, skip_login_check: bool = False) -> str:
+def handle_instagram_errors(driver: webdriver.Chrome, logger_instance, skip_login_check: bool = False, skip_rate_limit_check: bool = False) -> str:
     """
     Instagram固有のエラーを検知・処理
     
@@ -503,6 +503,7 @@ def handle_instagram_errors(driver: webdriver.Chrome, logger_instance, skip_logi
         driver: WebDriverインスタンス
         logger_instance: ロガーインスタンス
         skip_login_check: ログイン状態チェックをスキップするかどうか
+        skip_rate_limit_check: レート制限チェックをスキップするかどうか
         
     Returns:
         エラータイプ ('login_required', 'rate_limited', 'blocked', 'dom_changed', 'none')
@@ -513,8 +514,8 @@ def handle_instagram_errors(driver: webdriver.Chrome, logger_instance, skip_logi
             logger_instance.warning("⚠️ ログインセッションが切れています")
             return 'login_required'
         
-        # レート制限チェック
-        if detect_rate_limiting(driver):
+        # レート制限チェック（一時的に無効化可能）
+        if not skip_rate_limit_check and detect_rate_limiting(driver):
             logger_instance.warning("⚠️ レート制限が検知されました")
             return 'rate_limited'
         
