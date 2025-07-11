@@ -269,36 +269,41 @@ class InstagramHashtagScraper:
             except Exception:
                 pass
             
-            # 新しいセレクタで画像要素を検索
-            image_elements = safe_find_elements(
+            # _aagwクラスのdiv要素を検索
+            post_elements = safe_find_elements(
                 self.driver,
-                (By.CSS_SELECTOR, "div._aagw img"),
+                (By.CSS_SELECTOR, "div._aagw"),
                 timeout=10
             )
             
-            if not image_elements:
+            if not post_elements:
                 # 代替セレクタを試す
-                image_elements = safe_find_elements(
+                post_elements = safe_find_elements(
                     self.driver,
-                    (By.XPATH, "//div[@class='_aagw']//img"),
+                    (By.XPATH, "//div[@class='_aagw']"),
                     timeout=5
                 )
             
-            self.logger.info(f"画像要素を {len(image_elements)} 個検出しました")
+            self.logger.info(f"投稿要素を {len(post_elements)} 個検出しました")
             
-            # 各画像をクリックして投稿情報を取得（最大12個）
-            for i, img_element in enumerate(image_elements[:12]):
+            # デバッグ: 最初の要素の情報を出力
+            if post_elements:
+                self.logger.debug(f"最初の要素のクラス: {post_elements[0].get_attribute('class')}")
+                self.logger.debug(f"最初の要素のHTML: {post_elements[0].get_attribute('outerHTML')[:200]}...")
+            
+            # 各投稿をクリックして投稿情報を取得（最大12個）
+            for i, post_element in enumerate(post_elements[:12]):
                 try:
-                    # 画像をクリック可能な状態にスクロール
-                    self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", img_element)
+                    # 要素をクリック可能な状態にスクロール
+                    self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", post_element)
                     human_sleep(0.5, 1.0)
                     
-                    # 画像をクリック
+                    # div要素をクリック
                     try:
-                        img_element.click()
+                        post_element.click()
                     except Exception:
                         # JavaScriptでクリック
-                        self.driver.execute_script("arguments[0].click();", img_element)
+                        self.driver.execute_script("arguments[0].click();", post_element)
                     
                     human_sleep(1.0, 2.0)  # ポップアップ表示待機
                     
