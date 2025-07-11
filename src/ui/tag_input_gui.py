@@ -14,7 +14,7 @@ from datetime import datetime
 import sys
 
 # バージョン情報
-VERSION = "v2.1.1"
+VERSION = "v2.2.1"
 
 # パッケージのインポートパスを設定
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
