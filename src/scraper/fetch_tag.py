@@ -13,6 +13,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from selenium.webdriver.common.keys import Keys
 
 from .utils import (
     setup_logger, human_sleep, wait_for_element, safe_click,
@@ -250,54 +251,73 @@ class InstagramHashtagScraper:
             return []
     
     def _extract_top_posts(self) -> List[Dict[str, Any]]:
-        """トップ投稿を抽出"""
+        """投稿を抽出（新しいInstagram仕様対応）"""
         try:
-            top_posts = []
+            posts = []
             
-            # トップ投稿セクションまでスクロール
+            # ページを少しスクロールして投稿を表示
             try:
                 self.driver.execute_script("window.scrollTo(0, 500);")
                 human_sleep(2.0, 3.0)
             except Exception:
                 pass
             
-            # 投稿要素のセレクタパターン
-            selectors = [
-                "//article//a[contains(@href, '/p/')]",
-                "//div[contains(@class, '_aabd')]//a",
-                "//div[contains(@class, 'v1Nh3')]//a"
-            ]
+            # 新しいセレクタで画像要素を検索
+            image_elements = safe_find_elements(
+                self.driver,
+                (By.CSS_SELECTOR, "div._aagw img"),
+                timeout=10
+            )
             
-            for selector in selectors:
+            if not image_elements:
+                # 代替セレクタを試す
+                image_elements = safe_find_elements(
+                    self.driver,
+                    (By.XPATH, "//div[@class='_aagw']//img"),
+                    timeout=5
+                )
+            
+            self.logger.info(f"画像要素を {len(image_elements)} 個検出しました")
+            
+            # 各画像をクリックして投稿情報を取得（最大12個）
+            for i, img_element in enumerate(image_elements[:12]):
                 try:
-                    post_elements = safe_find_elements(
-                        self.driver, 
-                        (By.XPATH, selector), 
-                        timeout=5
-                    )
+                    # 画像をクリック可能な状態にスクロール
+                    self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", img_element)
+                    human_sleep(0.5, 1.0)
                     
-                    if post_elements:
-                        break
-                        
-                except Exception:
-                    continue
-            
-            # 投稿情報を抽出（最大12個）
-            for i, post_element in enumerate(post_elements[:12]):
-                try:
-                    post_data = self._extract_post_data(post_element)
+                    # 画像をクリック
+                    try:
+                        img_element.click()
+                    except Exception:
+                        # JavaScriptでクリック
+                        self.driver.execute_script("arguments[0].click();", img_element)
+                    
+                    human_sleep(1.0, 2.0)  # ポップアップ表示待機
+                    
+                    # ポップアップから投稿情報を取得
+                    post_data = self._extract_post_from_popup()
                     if post_data:
-                        top_posts.append(post_data)
-                        
+                        posts.append(post_data)
+                    
+                    # ポップアップを閉じる
+                    self._close_popup()
+                    human_sleep(0.5, 1.0)
+                    
                 except Exception as e:
                     self.logger.warning(f"投稿 {i+1} の取得に失敗: {e}")
+                    # エラー時もポップアップを閉じる試行
+                    try:
+                        self._close_popup()
+                    except:
+                        pass
                     continue
             
-            self.logger.info(f"トップ投稿取得: {len(top_posts)}個")
-            return top_posts
+            self.logger.info(f"投稿取得完了: {len(posts)}個")
+            return posts
             
         except Exception as e:
-            self.logger.error(f"トップ投稿取得エラー: {e}")
+            self.logger.error(f"投稿取得エラー: {e}")
             return []
     
     def _extract_post_data(self, post_element) -> Optional[Dict[str, Any]]:
@@ -361,6 +381,132 @@ class InstagramHashtagScraper:
             
         except Exception:
             return "image"
+    
+    def _extract_post_from_popup(self) -> Optional[Dict[str, Any]]:
+        """ポップアップから投稿情報を取得"""
+        try:
+            post_data = {}
+            
+            # ポップアップ内の投稿情報を取得
+            # 投稿URL
+            try:
+                url_element = wait_for_element(
+                    self.driver,
+                    (By.XPATH, "//a[contains(@href, '/p/')]"),
+                    timeout=5
+                )
+                if url_element:
+                    post_url = url_element.get_attribute('href')
+                    post_data['url'] = post_url
+                    post_data['post_id'] = post_url.split('/p/')[-1].rstrip('/')
+            except Exception:
+                pass
+            
+            # 画像URL
+            try:
+                img_element = wait_for_element(
+                    self.driver,
+                    (By.CSS_SELECTOR, "div._ar45 img, div[role='dialog'] img"),
+                    timeout=5
+                )
+                if img_element:
+                    post_data['image_url'] = img_element.get_attribute('src')
+            except Exception:
+                pass
+            
+            # 投稿のキャプション
+            try:
+                caption_element = wait_for_element(
+                    self.driver,
+                    (By.CSS_SELECTOR, "._ar45.system-fonts--body.segoe, div._ar45 span"),
+                    timeout=5
+                )
+                if caption_element:
+                    post_data['caption'] = clean_text(caption_element.text)[:200]  # 最初の200文字
+            except Exception:
+                pass
+            
+            # いいね数
+            try:
+                likes_element = wait_for_element(
+                    self.driver,
+                    (By.XPATH, "//a[contains(@href, '/liked_by/')]/span"),
+                    timeout=3
+                )
+                if likes_element:
+                    likes_text = likes_element.text
+                    post_data['likes'] = extract_number_from_text(likes_text)
+            except Exception:
+                post_data['likes'] = 0
+            
+            # 投稿タイプ
+            post_data['type'] = self._determine_post_type_from_popup()
+            
+            return post_data if post_data else None
+            
+        except Exception as e:
+            self.logger.warning(f"ポップアップからの情報取得エラー: {e}")
+            return None
+    
+    def _determine_post_type_from_popup(self) -> str:
+        """ポップアップから投稿タイプを判定"""
+        try:
+            # 動画要素の存在チェック
+            video_elements = self.driver.find_elements(By.TAG_NAME, "video")
+            if video_elements:
+                return "video"
+            
+            # カルーセルインジケーター
+            carousel_buttons = self.driver.find_elements(
+                By.XPATH, "//button[@aria-label='次へ' or @aria-label='Next']"
+            )
+            if carousel_buttons:
+                return "carousel"
+            
+            return "image"
+        except:
+            return "image"
+    
+    def _close_popup(self) -> None:
+        """ポップアップを閉じる"""
+        try:
+            # 閉じるボタンのセレクタパターン
+            close_selectors = [
+                "//div[@role='button']/*[name()='svg'][@aria-label='閉じる']/..",
+                "//button[@aria-label='閉じる']",
+                "//div[@role='button'][contains(@class, 'x1i10hfl')]",
+                "//*[name()='svg'][@aria-label='Close']/..",
+                "//body"  # 最終手段：背景クリック
+            ]
+            
+            for selector in close_selectors:
+                try:
+                    close_element = wait_for_element(
+                        self.driver,
+                        (By.XPATH, selector),
+                        timeout=2
+                    )
+                    if close_element:
+                        if selector == "//body":
+                            # 背景クリック（ポップアップ外）
+                            self.driver.execute_script(
+                                "document.elementFromPoint(50, 50).click();"
+                            )
+                        else:
+                            close_element.click()
+                        human_sleep(0.5, 1.0)
+                        return
+                except Exception:
+                    continue
+            
+            # ESCキーを送信
+            try:
+                self.driver.find_element(By.TAG_NAME, 'body').send_keys(Keys.ESCAPE)
+            except:
+                pass
+                
+        except Exception as e:
+            self.logger.warning(f"ポップアップを閉じる際のエラー: {e}")
     
     def cleanup(self):
         """リソースのクリーンアップ"""
