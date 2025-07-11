@@ -74,12 +74,13 @@ class InstagramHashtagScraper:
             self.logger.error(f"❌ セッション初期化エラー: {e}")
             return False
     
-    def fetch_hashtag_info(self, hashtag: str, max_retries: int = 3) -> Dict[str, Any]:
+    def fetch_hashtag_info(self, hashtag: str, max_retries: int = 3, max_posts: int = 20) -> Dict[str, Any]:
         """
         ハッシュタグ情報を取得
         
         Args:
             hashtag: ハッシュタグ名（#は不要）
+            max_posts: 取得する投稿数の上限
             
         Returns:
             取得されたハッシュタグ情報
@@ -138,7 +139,7 @@ class InstagramHashtagScraper:
                 # データ取得実行
                 hashtag_data["post_count"] = self._extract_post_count()
                 hashtag_data["related_tags"] = self._extract_related_tags()
-                hashtag_data["top_posts"] = self._extract_top_posts()
+                hashtag_data["top_posts"] = self._extract_top_posts(max_posts)
                 
                 self.logger.info(f"✅ データ取得完了: #{clean_hashtag} ({hashtag_data['post_count']:,} 投稿)")
                 return hashtag_data
@@ -257,7 +258,7 @@ class InstagramHashtagScraper:
             self.logger.error(f"関連タグ取得エラー: {e}")
             return []
     
-    def _extract_top_posts(self) -> List[Dict[str, Any]]:
+    def _extract_top_posts(self, max_posts: int = 20) -> List[Dict[str, Any]]:
         """投稿を抽出（リンク直接アクセス方式）"""
         try:
             posts = []
@@ -303,10 +304,10 @@ class InstagramHashtagScraper:
             # 現在のページURLを保存（後で戻るため）
             original_url = self.driver.current_url
             
-            # 各投稿ページを開いて情報を取得（最大12個）
-            for i, post_url in enumerate(unique_urls[:12]):
+            # 各投稿ページを開いて情報を取得
+            for i, post_url in enumerate(unique_urls[:max_posts]):
                 try:
-                    self.logger.info(f"投稿 {i+1}/{min(len(unique_urls), 12)} を取得中: {post_url}")
+                    self.logger.info(f"投稿 {i+1}/{min(len(unique_urls), max_posts)} を取得中: {post_url}")
                     
                     # 投稿ページを開く
                     self.driver.get(post_url)
@@ -627,13 +628,14 @@ class InstagramHashtagScraper:
             self.login_manager.cleanup()
 
 
-def fetch_hashtag_data(hashtag: str, headless: bool = True) -> Dict[str, Any]:
+def fetch_hashtag_data(hashtag: str, headless: bool = True, max_posts: int = 20) -> Dict[str, Any]:
     """
     ハッシュタグデータを取得する便利関数
     
     Args:
         hashtag: ハッシュタグ名
         headless: ヘッドレスモード
+        max_posts: 取得する投稿数の上限
         
     Returns:
         ハッシュタグデータ
@@ -652,7 +654,7 @@ def fetch_hashtag_data(hashtag: str, headless: bool = True) -> Dict[str, Any]:
             }
         
         # データ取得
-        return scraper.fetch_hashtag_info(hashtag)
+        return scraper.fetch_hashtag_info(hashtag, max_posts=max_posts)
         
     finally:
         scraper.cleanup()

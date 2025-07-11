@@ -177,10 +177,22 @@ class InstagramScraperGUI:
         
         ttk.Label(filename_frame, text="（空白時は自動生成）", foreground="gray").grid(row=0, column=2, sticky=tk.W, padx=(10, 0))
         
+        # 投稿確認数設定
+        posts_frame = ttk.Frame(options_frame)
+        posts_frame.grid(row=3, column=0, sticky=(tk.W, tk.E), pady=5)
+        
+        ttk.Label(posts_frame, text="投稿確認数:").grid(row=0, column=0, sticky=tk.W, padx=(0, 10))
+        
+        self.max_posts_var = tk.StringVar(value="20")
+        posts_entry = ttk.Entry(posts_frame, textvariable=self.max_posts_var, width=10)
+        posts_entry.grid(row=0, column=1, sticky=tk.W)
+        
+        ttk.Label(posts_frame, text="（取得する投稿の最大数）", foreground="gray").grid(row=0, column=2, sticky=tk.W, padx=(10, 0))
+        
     def create_button_section(self, parent):
         """実行ボタンセクション"""
         button_frame = ttk.Frame(parent)
-        button_frame.grid(row=3, column=0, columnspan=3, pady=20)
+        button_frame.grid(row=4, column=0, columnspan=3, pady=20)
         
         # 実行ボタン
         self.execute_button = ttk.Button(
@@ -341,7 +353,15 @@ class InstagramScraperGUI:
                 
                 # データ取得
                 try:
-                    result = fetch_hashtag_data(hashtag, self.headless_var.get())
+                    # 投稿確認数を取得（無効な値の場合はデフォルト20を使用）
+                    try:
+                        max_posts = int(self.max_posts_var.get())
+                        if max_posts <= 0:
+                            max_posts = 20
+                    except (ValueError, AttributeError):
+                        max_posts = 20
+                    
+                    result = fetch_hashtag_data(hashtag, self.headless_var.get(), max_posts)
                     results.append(result)
                     
                     # 結果表示
